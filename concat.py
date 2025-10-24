@@ -20,18 +20,18 @@ EXCLUDE_DIRS = {
     'obj', 
     '.git', 
     '__pycache__', 
-    '.vscode', 
-    '.idea'
+    '.idea',
+    'workbench'
 }
 
-def concatenate_files(root_dir, file_pattern, script_name):
+def concatenate_files(root_dir, file_patterns, script_name):
     """
     Walks through a directory tree and concatenates the content of files 
-    matching the given pattern.
+    matching any of the given patterns.
 
     Args:
         root_dir (str): The path to the root directory to start searching from.
-        file_pattern (str): The pattern for files to match (e.g., '*.py', '*.md').
+        file_patterns (list): A list of patterns for files to match (e.g., ['*.py', '*.md']).
         script_name (str): The name of this script, to avoid adding itself.
 
     Returns:
@@ -40,6 +40,7 @@ def concatenate_files(root_dir, file_pattern, script_name):
     """
     concatenated_content = []
     print(f"\nStarting search in: {os.path.abspath(root_dir)}")
+    print(f"Searching for patterns: {', '.join(file_patterns)}")
     print(f"Excluding directories: {', '.join(EXCLUDE_DIRS)}")
     
     # os.walk allows us to traverse the directory tree
@@ -51,25 +52,27 @@ def concatenate_files(root_dir, file_pattern, script_name):
         dirnames[:] = [d for d in dirnames if d not in EXCLUDE_DIRS]
 
         # --- Find and read matching files ---
-        for filename in fnmatch.filter(filenames, file_pattern):
-            # Skip the script file itself
-            if os.path.basename(filename) == script_name and dirpath == os.path.dirname(os.path.abspath(sys.argv[0])):
-                continue
+        for filename in filenames:
+            # Check if the filename matches ANY of the provided patterns
+            if any(fnmatch.fnmatch(filename, pattern) for pattern in file_patterns):
+                # Skip the script file itself
+                if os.path.basename(filename) == script_name and dirpath == os.path.dirname(os.path.abspath(sys.argv[0])):
+                    continue
 
-            filepath = os.path.join(dirpath, filename)
-            
-            # We add a header to separate the content of each file
-            header = f"\n# --- START: {os.path.relpath(filepath, root_dir)} ---\n"
-            footer = f"\n# --- END: {os.path.relpath(filepath, root_dir)} ---\n"
-            
-            try:
-                with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
-                    content = f.read()
-                    concatenated_content.append(header + content + footer)
-                    print(f"  + Added: {filepath}")
-            except Exception as e:
-                print(f"  ! Error reading file {filepath}: {e}")
+                filepath = os.path.join(dirpath, filename)
                 
+                # We add a header to separate the content of each file
+                header = f"\n# --- START: {os.path.relpath(filepath, root_dir)} ---\n"
+                footer = f"\n# --- END: {os.path.relpath(filepath, root_dir)} ---\n"
+                
+                try:
+                    with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+                        content = f.read()
+                        concatenated_content.append(header + content + footer)
+                        print(f"  + Added: {filepath}")
+                except Exception as e:
+                    print(f"  ! Error reading file {filepath}: {e}")
+                    
     return "".join(concatenated_content)
 
 def main():
@@ -78,7 +81,7 @@ def main():
     """
     # --- Set up command-line argument parsing ---
     parser = argparse.ArgumentParser(
-        description="A script to find and concatenate files of a specific type within a directory tree.",
+        description="A script to find and concatenate files of specific types within a directory tree.",
         formatter_class=argparse.RawTextHelpFormatter # For better help text formatting
     )
     
@@ -108,11 +111,15 @@ def main():
         print("Please install it by running: pip install pyperclip")
         return
 
-    # --- Get user input for the file pattern ---
+    # --- Get user input for the file patterns ---
     try:
-        file_pattern = input("Enter the file pattern to search for (e.g., *.md, *.py, *.*): ")
-        if not file_pattern.strip():
-            print("Error: File pattern cannot be empty.")
+        patterns_input = input("Enter file patterns, separated by commas (e.g., *.md, *.sln, *.csproj): ")
+        # Split the input string by commas and strip any whitespace from each pattern.
+        # This creates a list of patterns.
+        file_patterns = [p.strip() for p in patterns_input.split(',') if p.strip()]
+        
+        if not file_patterns:
+            print("Error: File pattern list cannot be empty.")
             return
     except KeyboardInterrupt:
         print("\nOperation cancelled by user.")
@@ -120,17 +127,17 @@ def main():
 
     # --- Run the main logic ---
     script_name = os.path.basename(sys.argv[0])
-    full_content = concatenate_files(args.directory, file_pattern, script_name)
+    full_content = concatenate_files(args.directory, file_patterns, script_name)
 
     if not full_content:
-        print(f"\nNo files matching '{file_pattern}' were found in '{args.directory}'.")
+        print(f"\nNo files matching any of these patterns '{patterns_input}' were found in '{os.path.abspath(args.directory)}'.")
         return
 
     # --- Handle the output ---
     # The order of priority is: File > Clipboard > Console
     if args.output:
         try:
-            with open(args.output, 'w', encoding='utf-8') as f:
+            with open(args.output, 'w', encoding='utf-utf-8') as f:
                 f.write(full_content)
             print(f"\n✅ Success! All content has been written to '{args.output}'.")
         except IOError as e:
