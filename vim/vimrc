@@ -1,0 +1,119 @@
+call plug#begin('~/.vim/plugged')
+  Plug 'sheerun/vim-polyglot'
+  Plug 'prettier/vim-prettier', { 'do': 'yarn install --frozen-lockfile --production', 'for': ['javascript', 'typescript', 'css', 'less', 'scss', 'json', 'graphql', 'markdown', 'vue', 'svelte', 'yaml', 'html'] }
+  Plug 'ctrlpvim/ctrlp.vim'
+  Plug 'tpope/vim-commentary'
+  Plug 'jiangmiao/auto-pairs'
+  " THE DEBUGGER
+  Plug 'puremourning/vimspector'
+call plug#end()
+
+set number
+set autoindent
+set ruler
+colorscheme molokai
+set guifont=Monaco:h50
+set clipboard=unnamed
+
+" --- VIMSPECTOR (MANUAL GOD MODE) ---
+
+" 1. DISABLE default mappings so they don't fight us
+let g:vimspector_enable_mappings = 0
+
+" 2. UI Preferences
+let g:vimspector_sidebar_width = 50
+let g:vimspector_code_minwidth = 85
+let g:vimspector_terminal_maxheight = 15
+
+" 3. STATE TRACKING (The "Zombie" Fix)
+let g:vimspector_is_active = 0
+augroup VimspectorTracking
+    autocmd!
+    " Event 1: If we close the debugger, set to 0
+    autocmd User VimspectorDebugEnded let g:vimspector_is_active = 0
+    
+    " Event 2 (THE FIX): If we SAVE a .cs file, assume we need to rebuild
+    " This ensures F5 always rebuilds if you have changed code.
+    autocmd BufWritePost *.cs let g:vimspector_is_active = 0
+augroup END
+
+" 4. GLOBAL MAPPINGS (Applies to all files)
+" F5 = Start / Continue (Default behavior for non-C# files)
+nmap <F5> <Plug>VimspectorContinue
+" F3 = RESET (The Eject Button - Stops & Closes Windows)
+nmap <F3> :VimspectorReset<CR>
+" F4 = Restart Debugger (Global default)
+nmap <F4> <Plug>VimspectorRestart
+" F6 = Pause (Global default)
+nmap <F6> <Plug>VimspectorPause
+" F9 = Toggle Breakpoint
+nmap <F9> <Plug>VimspectorToggleBreakpoint
+" F10 = Step Over
+nmap <F10> <Plug>VimspectorStepOver
+" F11 = Step Into
+nmap <F11> <Plug>VimspectorStepInto
+" F12 = Step Out
+nmap <F12> <Plug>VimspectorStepOut
+
+" 5. LANGUAGE SPECIFIC OVERRIDES (Buffer Local - these win over Global)
+
+" PYTHON: F6 = Run without debugging (Overrides global Pause)
+autocmd FileType python map <buffer> <F6> :w<CR>:exec '!clear; python3' shellescape(@%, 1)<CR>
+
+" C#: F5 = Smart Run (Build if dead, Continue if running)
+autocmd FileType cs nnoremap <buffer> <F5> :call SmartBuildAndDebug()<CR>
+
+" 6. CLEANUP: Hover to inspect variables
+nmap <Leader>di <Plug>VimspectorBalloonEval
+xmap <Leader>di <Plug>VimspectorBalloonEval
+
+" --- CUSTOM C# LOGIC ---
+
+" DECISION MAKER: Do we build or do we just continue?
+function! SmartBuildAndDebug()
+    " 1. CHECK FOR DIRTY BUFFER
+    " If you have edited the file but not saved, we MUST rebuild.
+    if &modified
+        echo "💾 Unsaved changes detected. Rebuilding..."
+        call BuildAndDebugCS()
+
+    " 2. CHECK IF DEBUGGER IS ALREADY RUNNING
+    " If file is clean and debugger is active, just Continue.
+    elseif g:vimspector_is_active == 1
+        echo "▶️ Debugger Active: Continuing..."
+        call vimspector#Continue()
+
+    " 3. OTHERWISE START FRESH
+    else
+        call BuildAndDebugCS()
+    endif
+endfunction
+
+" WORKER: The heavy lifting (Reset -> Save -> Build -> Launch)
+function! BuildAndDebugCS()
+    " 1. Force close any dead/existing session
+    call vimspector#Reset()
+
+    " 2. Save the file
+    write
+    sleep 100m
+
+    " 3. Build the project
+    redraw
+    echo "🔨 Building C# Project..."
+    let build_out = system('dotnet build ' . expand('%:h'))
+
+    " 4. Check for success (0 = success)
+    if v:shell_error == 0
+        echo "✅ Build Succeeded. Launching..."
+
+        " 5. Launch SPECIFIC config
+        call vimspector#LaunchWithSettings({ 'configuration': 'Run C# (Smart Build)' })
+
+        " 6. FORCE the Active state
+        let g:vimspector_is_active = 1
+    else
+        echoerr "❌ Build Failed!"
+        echo build_out
+    endif
+endfunction

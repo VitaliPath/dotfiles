@@ -1,0 +1,24 @@
+{
+  "configurations": {
+    "Run Current Python": {
+      "adapter": "debugpy",
+      "configuration": {
+        "request": "launch",
+        "program": "${file}",
+        "stopOnEntry": true
+      }
+    },
+    "Run C# (Smart Build)": {
+      "adapter": "netcoredbg",
+      "configuration": {
+        "request": "launch",
+        "program": "${fileDirname}/bin/Debug/net8.0/${AskForDllName}.dll",
+        "cwd": "${fileDirname}",
+        "stopAtEntry": true,
+        "env": {
+          "DOTNET_ROOT": "/opt/homebrew/share/dotnet"
+        }
+      }
+    }
+  }
+}
