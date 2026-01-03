@@ -21,7 +21,8 @@ EXCLUDE_DIRS = {
     '.git', 
     '__pycache__', 
     '.idea',
-    'workbench'
+    'workbench',
+    '.venv'
 }
 
 def concatenate_files(root_dir, file_patterns, script_name, dynamic_exclusions):
