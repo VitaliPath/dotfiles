@@ -90,6 +90,10 @@ def concatenate_files(root_dir, file_patterns, script_name, dynamic_exclusions):
                 try:
                     with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
                         content = f.read()
+
+                        if not content.strip():
+                            content = "(empty file)"
+
                         concatenated_content.append(header + content + footer)
                         print(f"  + Added: {rel_filepath}")
                 except Exception as e:
