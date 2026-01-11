@@ -4,16 +4,12 @@ import fnmatch
 import argparse
 import sys
 
-# Try to import pyperclip, which is needed for clipboard functionality.
-# Provide a helpful message if it's not installed.
 try:
     import pyperclip
 except ImportError:
     pyperclip = None
 
 # --- Configuration (Hardcoded Exclusions) ---
-# Add any directory names you want to skip to this set.
-# This is case-sensitive.
 EXCLUDE_DIRS = {
     'node_modules', 
     'bin', 
@@ -26,19 +22,6 @@ EXCLUDE_DIRS = {
 }
 
 def concatenate_files(root_dir, file_patterns, script_name, dynamic_exclusions):
-    """
-    Walks through a directory tree and concatenates the content of files 
-    matching any of the given patterns, while applying dynamic exclusions.
-
-    Args:
-        root_dir (str): The path to the root directory to start searching from.
-        file_patterns (list): A list of patterns for files to match (e.g., ['*.py', '*.md']).
-        script_name (str): The name of this script, to avoid adding itself.
-        dynamic_exclusions (set): A set of strings (paths or filenames) to exclude.
-
-    Returns:
-        str: A single string containing the concatenated content of all found files.
-    """
     concatenated_content = []
     print(f"\nStarting search in: {os.path.abspath(root_dir)}")
     print(f"Searching for patterns: {', '.join(file_patterns)}")
@@ -46,23 +29,30 @@ def concatenate_files(root_dir, file_patterns, script_name, dynamic_exclusions):
     if dynamic_exclusions:
         print(f"Dynamically excluded items: {', '.join(dynamic_exclusions)}")
     
-    # Use the absolute path for root to handle path comparisons correctly
     abs_root_dir = os.path.abspath(root_dir)
 
     for dirpath, dirnames, filenames in os.walk(root_dir, topdown=True):
         
         # --- 1. Hardcoded Directory Exclusion ---
-        # We modify 'dirnames' in-place to prevent os.walk from descending
-        # into the directories we want to skip.
         dirnames[:] = [d for d in dirnames if d not in EXCLUDE_DIRS]
 
-        # --- 2. Dynamic Directory Exclusion ---
-        # Exclude directories if they are specified in the dynamic_exclusions set.
-        # This checks the full relative path to the root.
-        dirnames[:] = [
-            d for d in dirnames 
-            if os.path.relpath(os.path.join(dirpath, d), abs_root_dir) not in dynamic_exclusions
-        ]
+        # --- 2. Dynamic Directory Exclusion (Updated) ---
+        # We need to filter 'dirnames' so os.walk doesn't even enter them.
+        # This checks if the directory name itself is in the exclusion list.
+        # It also checks if the relative path to that directory matches an exclusion.
+        
+        allowed_dirs = []
+        for d in dirnames:
+            full_path = os.path.join(dirpath, d)
+            rel_path = os.path.relpath(full_path, abs_root_dir)
+            
+            # If the folder name OR the folder path is in the exclusion set, skip it
+            if d in dynamic_exclusions or rel_path in dynamic_exclusions:
+                print(f"  - Skipping Directory (Excluded): {rel_path}")
+            else:
+                allowed_dirs.append(d)
+        
+        dirnames[:] = allowed_dirs
 
         # --- Find and read matching files ---
         for filename in filenames:
@@ -70,30 +60,24 @@ def concatenate_files(root_dir, file_patterns, script_name, dynamic_exclusions):
             filepath = os.path.join(dirpath, filename)
             rel_filepath = os.path.relpath(filepath, abs_root_dir)
 
-            # Check if the filename matches ANY of the provided patterns
             if any(fnmatch.fnmatch(filename, pattern) for pattern in file_patterns):
                 
-                # --- 3. Skip the script file itself (existing logic) ---
                 if os.path.basename(filename) == script_name and dirpath == os.path.dirname(os.path.abspath(sys.argv[0])):
                     continue
 
-                # --- 4. Dynamic File Exclusion ---
-                # Check against the full relative path OR just the filename
+                # --- 3. Dynamic File Exclusion ---
                 if rel_filepath in dynamic_exclusions or filename in dynamic_exclusions:
-                    print(f"  - Skipping (Excluded): {rel_filepath}")
+                    print(f"  - Skipping File (Excluded): {rel_filepath}")
                     continue
 
-                # We add a header to separate the content of each file
                 header = f"\n# --- START: {rel_filepath} ---\n"
                 footer = f"\n# --- END: {rel_filepath} ---\n"
                 
                 try:
                     with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
                         content = f.read()
-
                         if not content.strip():
                             content = "(empty file)"
-
                         concatenated_content.append(header + content + footer)
                         print(f"  + Added: {rel_filepath}")
                 except Exception as e:
@@ -102,92 +86,63 @@ def concatenate_files(root_dir, file_patterns, script_name, dynamic_exclusions):
     return "".join(concatenated_content)
 
 def main():
-    """
-    Main function to parse arguments and run the script.
-    """
-    # --- Set up command-line argument parsing ---
     parser = argparse.ArgumentParser(
         description="A script to find and concatenate files of specific types within a directory tree.",
-        formatter_class=argparse.RawTextHelpFormatter # For better help text formatting
+        formatter_class=argparse.RawTextHelpFormatter
     )
+    
+    parser.add_argument('directory', nargs='?', default=os.getcwd(), help="The root directory to search in.")
+    parser.add_argument('-o', '--output', help="Output file name.")
+    parser.add_argument('-c', '--copy', action='store_true', help="Copy output to clipboard.")
     
     parser.add_argument(
-        'directory',
-        nargs='?', # Makes the argument optional
-        default=os.getcwd(), # Defaults to the current working directory
-        help="The root directory to search in.\nDefaults to the current directory if not provided."
-    )
-    
-    parser.add_argument(
-        '-o', '--output',
-        help="Optional: The name of the file to save the output to."
-    )
-    
-    parser.add_argument(
-        '-c', '--copy',
-        action='store_true', # Makes this a flag, e.g., -c
-        help="Optional: Copy the output to the clipboard instead of printing it.\nRequires the 'pyperclip' library."
-    )
-    
-    parser.add_argument( # <--- NEW ARGUMENT ---
         '-e', '--exclude',
         type=str,
         default='',
-        help="Optional: Comma-separated list of paths or filenames to exclude.\nExcludes are relative to the 'directory' argument.\nExample: 'tests/config.yaml,README.md'"
-    ) # <--- END NEW ARGUMENT ---
+        help="Optional: Comma-separated list of directories or files to exclude.\nExample: 'tests,my_folder/secret.txt'"
+    )
 
     args = parser.parse_args()
 
-    # --- Check for pyperclip if -c is used ---
     if args.copy and not pyperclip:
         print("\n❌ Error: The 'pyperclip' library is required for clipboard functionality.")
-        print("Please install it by running: pip install pyperclip")
         return
 
-    # --- Process Exclusions ---
-    # Convert comma-separated string into a set of unique, stripped strings for fast lookup
     dynamic_exclusions = {p.strip() for p in args.exclude.split(',') if p.strip()}
 
-    # --- Get user input for the file patterns ---
     try:
-        patterns_input = input("Enter file patterns, separated by commas (e.g., *.md, *.sln, *.csproj): ")
-        # Split the input string by commas and strip any whitespace from each pattern.
+        patterns_input = input("Enter file patterns (e.g., *.md, *.py): ")
         file_patterns = [p.strip() for p in patterns_input.split(',') if p.strip()]
-        
         if not file_patterns:
             print("Error: File pattern list cannot be empty.")
             return
     except KeyboardInterrupt:
-        print("\nOperation cancelled by user.")
+        print("\nOperation cancelled.")
         return
 
-    # --- Run the main logic ---
     script_name = os.path.basename(sys.argv[0])
     full_content = concatenate_files(args.directory, file_patterns, script_name, dynamic_exclusions)
 
     if not full_content:
-        print(f"\nNo files matching any of these patterns '{patterns_input}' were found in '{os.path.abspath(args.directory)}'.")
+        print(f"\nNo matching files found.")
         return
 
-    # --- Handle the output ---
-    # The order of priority is: File > Clipboard > Console
     if args.output:
         try:
             with open(args.output, 'w', encoding='utf-8') as f:
                 f.write(full_content)
-            print(f"\n✅ Success! All content has been written to '{args.output}'.")
+            print(f"\n✅ Written to '{args.output}'.")
         except IOError as e:
-            print(f"\n❌ Error: Could not write to output file '{args.output}'. Reason: {e}")
+            print(f"\n❌ Error writing file: {e}")
     elif args.copy:
         try:
             pyperclip.copy(full_content)
-            print("\n✅ Success! Content has been copied to the clipboard.")
+            print("\n✅ Copied to clipboard.")
         except pyperclip.PyperclipException as e:
-            print(f"\n❌ Error: Could not copy to clipboard. Reason: {e}")
+            print(f"\n❌ Error copying: {e}")
     else:
         print("\n--- CONCATENATED CONTENT ---\n")
         print(full_content)
-
 
 if __name__ == "__main__":
     main()
