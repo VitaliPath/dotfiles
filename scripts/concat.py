@@ -18,7 +18,8 @@ EXCLUDE_DIRS = {
     '__pycache__', 
     '.idea',
     'workbench',
-    '.venv'
+    '.venv',
+    '.pytest_cache'
 }
 
 def concatenate_files(root_dir, file_patterns, script_name, dynamic_exclusions):

@@ -67,6 +67,14 @@ chmod +x scripts/concat.py
 concat.py . -c
 ```
 
+### `ticket.py`
+
+A terminal-based viewer for Project Forge tickets. It parses JSON tickets and renders them as beautiful, color-coded Markdown directly in the terminal, eliminating the need to context-switch to a browser or text editor.
+
+**Dependencies:**
+```bash
+pip3 install --break-system-packages rich
+
 -----
 
 ## 🎮 Vim & Debugging
