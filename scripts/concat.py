@@ -19,6 +19,7 @@ EXCLUDE_DIRS = {
     '.idea',
     'workbench',
     '.venv',
+    'venv',
     '.pytest_cache'
 }
 

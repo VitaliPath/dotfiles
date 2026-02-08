@@ -11,72 +11,84 @@ from rich.table import Table
 console = Console()
 
 def clean_math(text):
-    """Converts basic LaTeX math to readable terminal Unicode."""
+    """Converts LaTeX math to readable terminal Unicode."""
     if not text: return ""
     
-    # Replace symbols
-    text = text.replace(r"\sum", "Σ").replace(r"\cdot", "·").replace(r"\max", "max")
+    # Mapping LaTeX to Unicode/Readable text
+    replacements = {
+        r"\Delta": "Δ",
+        r"\theta": "θ",
+        r"\text": "",
+        r"\times": "×",
+        r"\log": "log",
+        r"\frac": "",
+        r"\sum": "Σ",
+        r"\cdot": "·",
+        r"\times": "×",
+        r"\log": "log",
+        r"\frac": "", # We'll just strip the command and keep the {a}{b}
+        r"\text": "",
+        r"\infty": "∞",
+        r"\pm": "±"
+    }
     
-    # Remove LaTeX formatting noise
-    text = re.sub(r"[\${}]", "", text) # Removes $, {, and }
+    for lat, uni in replacements.items():
+        text = text.replace(lat, uni)
     
-    # Clean up leftover backslashes
-    text = text.replace("\\", "")
-    return text
+    # Clean up fractions: \frac{N}{df} -> (N/df)
+    text = re.sub(r"\{(\w+)\}\{(\w+)\}", r"(\1/\2)", text)
+    # Remove remaining curly braces and dollar signs
+    text = re.sub(r"[\${}]", "", text)
+    # Clean up subscript formatting (optional: use unicode subscripts if desired)
+    text = text.replace("_", "") 
+    
+    return text.replace("\\", "")
 
-def find_ticket(ticket_id, base_dir="."):
-    """Search for the ticket in the standard Forge directory structure."""
-    dirs = ["tickets/in_progress", "tickets/open", "tickets/closed"]
-    for d in dirs:
-        path = Path(base_dir) / d / f"{ticket_id}.json"
-        if path.exists():
-            return path
+def find_ticket(ticket_id):
+    """Search for the ticket in the centralized Stoneburner-Knowledge-Base."""
+    kb_base = Path("/Users/seanstoneburner/Repos/Stoneburner-Knowledge-Base")
+    # Recursively find the JSON file
+    for path in kb_base.rglob(f"{ticket_id}.json"):
+        return path
     return None
 
 def view_ticket(ticket_id):
     path = find_ticket(ticket_id)
     if not path:
-        console.print(f"[red]Error: Ticket {ticket_id} not found in the current directory tree.[/red]")
+        console.print(f"[red]Error: Ticket {ticket_id} not found.[/red]")
         return
 
     with open(path, "r") as f:
         data = json.load(f)
 
-    # 1. Header Table
+    # Header
     table = Table(show_header=False, expand=True, box=None)
     table.add_column("Key", style="cyan", width=15)
-    table.add_column("Value", style="white", justify="left")
+    table.add_column("Value", style="white")
     table.add_row("🎫 Ticket ID", f"[bold green]{data['id']}[/bold green] ({data['state']})")
     table.add_row("📂 Subsystem", f"{data['Subsystem']} -> {data['Component']}")
     table.add_row("⏱️ Estimation", data.get('fields', {}).get('estimation', 'N/A'))
 
     console.print(Panel(table, title=f"[bold]{data['title']}[/bold]", border_style="blue"))
 
-    # 2. Render the Deep Dive (Required field usually)
-    overview = data.get('overview')
-    if overview:
+    # Overview
+    if data.get('overview'):
         console.print("\n[bold cyan]📖 Overview / Deep Dive[/bold cyan]")
-        console.print(Markdown(clean_math(overview)))
+        console.print(Markdown(data['overview']))
 
-    # 3. Render Mathematical Context (Optional - Forge Only)
-    math_context = data.get('mathematical_context')
-    if math_context:
+    # Math - Using the updated cleaner
+    if data.get('mathematical_context'):
         console.print("\n[bold magenta]📐 Mathematical Context[/bold magenta]")
-        console.print(Markdown(clean_math(math_context)))
+        console.print(clean_math(data['mathematical_context']))
 
-    # 4. Acceptance Criteria (Safe List Iteration)
-    criteria = data.get('acceptance_criteria', [])
-    if criteria:
-        console.print("\n[bold yellow]✅ Acceptance Criteria[/bold yellow]")
-        for item in criteria:
-            console.print(f"  [green]•[/green] {item}")
-
-    # 5. Testing Scenarios (Optional)
-    tests = data.get('testing_scenarios', [])
-    if tests:
-        console.print("\n[bold blue]🧪 Testing Scenarios[/bold blue]")
-        for item in tests:
-            console.print(f"  [cyan]•[/cyan] {item}")
+    # Lists
+    for label, key, color in [("✅ Acceptance Criteria", "acceptance_criteria", "yellow"), 
+                              ("🧪 Testing Scenarios", "testing_scenarios", "blue")]:
+        items = data.get(key, [])
+        if items:
+            console.print(f"\n[bold {color}]{label}[/bold {color}]")
+            for item in items:
+                console.print(f"  [green]•[/green] {item}")
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:

@@ -74,6 +74,7 @@ A terminal-based viewer for Project Forge tickets. It parses JSON tickets and re
 **Dependencies:**
 ```bash
 pip3 install --break-system-packages rich
+```
 
 -----
 
