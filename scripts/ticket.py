@@ -14,35 +14,32 @@ def clean_math(text):
     """Converts LaTeX math to readable terminal Unicode."""
     if not text: return ""
     
-    # Mapping LaTeX to Unicode/Readable text
-    replacements = {
-        r"\Delta": "Δ",
-        r"\theta": "θ",
-        r"\text": "",
-        r"\times": "×",
+    # Map common LaTeX commands to Unicode for terminal clarity
+    subs = {
+        r"\max": "max",
         r"\log": "log",
-        r"\frac": "",
+        r"\frac": "", 
+        r"\times": "×",
+        r"\partial": "∂",
+        r"\dots": "...",
+        r"\beta": "β",
+        r"\epsilon": "ε",
         r"\sum": "Σ",
-        r"\cdot": "·",
-        r"\times": "×",
-        r"\log": "log",
-        r"\frac": "", # We'll just strip the command and keep the {a}{b}
-        r"\text": "",
-        r"\infty": "∞",
-        r"\pm": "±"
+        r"\Delta": "Δ",
+        r"\left(": "(",
+        r"\right)": ")",
     }
     
-    for lat, uni in replacements.items():
+    for lat, uni in subs.items():
         text = text.replace(lat, uni)
     
-    # Clean up fractions: \frac{N}{df} -> (N/df)
-    text = re.sub(r"\{(\w+)\}\{(\w+)\}", r"(\1/\2)", text)
+    # Handle \frac{a}{b} -> (a/b) - handles alphanumeric and underscores
+    text = re.sub(r"\{([\w_]+)\}\{([\w_]+)\}", r"(\1/\2)", text)
+    
     # Remove remaining curly braces and dollar signs
     text = re.sub(r"[\${}]", "", text)
-    # Clean up subscript formatting (optional: use unicode subscripts if desired)
-    text = text.replace("_", "") 
     
-    return text.replace("\\", "")
+    return text.strip()
 
 def find_ticket(ticket_id):
     """Search for the ticket in the centralized Stoneburner-Knowledge-Base."""
@@ -61,34 +58,37 @@ def view_ticket(ticket_id):
     with open(path, "r") as f:
         data = json.load(f)
 
-    # Header
+    # Header Panel
     table = Table(show_header=False, expand=True, box=None)
     table.add_column("Key", style="cyan", width=15)
     table.add_column("Value", style="white")
-    table.add_row("🎫 Ticket ID", f"[bold green]{data['id']}[/bold green] ({data['state']})")
-    table.add_row("📂 Subsystem", f"{data['Subsystem']} -> {data['Component']}")
-    table.add_row("⏱️ Estimation", data.get('fields', {}).get('estimation', 'N/A'))
+    
+    table.add_row("🎫 Ticket ID", f"[bold green]{data.get('id')}[/bold green] ({data.get('State', 'N/A')})")
+    table.add_row("📂 Subsystem", f"{data.get('Subsystem', 'N/A')} -> {data.get('Component', 'N/A')}")
+    table.add_row("📊 Complexity", f"[yellow]{data.get('Complexity', 'N/A')}[/yellow]")
+    table.add_row("⏱️ Estimation", data.get('Estimation', 'N/A'))
 
-    console.print(Panel(table, title=f"[bold]{data['title']}[/bold]", border_style="blue"))
+    title = data.get('summary', data.get('title', 'No Title'))
+    console.print(Panel(table, title=f"[bold]{title}[/bold]", border_style="blue"))
 
-    # Overview
-    if data.get('overview'):
-        console.print("\n[bold cyan]📖 Overview / Deep Dive[/bold cyan]")
+    # Description Rendering
+    description = data.get('description')
+    if description:
+        # STEP 1: Process LaTeX before the Markdown parser sees it
+        def math_replacer(match):
+            return clean_math(match.group(1))
+
+        # Replace $$block$$ first, then $inline$
+        description = re.sub(r"\$\$(.*?)\$\$", math_replacer, description, flags=re.DOTALL)
+        description = re.sub(r"\$(.*?)\$", math_replacer, description)
+
+        # STEP 2: Render as Markdown
+        console.print(Markdown(description))
+    
+    # Legacy fallbacks for older JSON formats
+    elif data.get('overview'):
+        console.print("\n[bold cyan]📖 Overview[/bold cyan]")
         console.print(Markdown(data['overview']))
-
-    # Math - Using the updated cleaner
-    if data.get('mathematical_context'):
-        console.print("\n[bold magenta]📐 Mathematical Context[/bold magenta]")
-        console.print(clean_math(data['mathematical_context']))
-
-    # Lists
-    for label, key, color in [("✅ Acceptance Criteria", "acceptance_criteria", "yellow"), 
-                              ("🧪 Testing Scenarios", "testing_scenarios", "blue")]:
-        items = data.get(key, [])
-        if items:
-            console.print(f"\n[bold {color}]{label}[/bold {color}]")
-            for item in items:
-                console.print(f"  [green]•[/green] {item}")
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
