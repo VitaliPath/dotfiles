@@ -58,21 +58,29 @@ def view_ticket(ticket_id):
     with open(path, "r") as f:
         data = json.load(f)
 
-    # Header Panel
+    # Header Panel - Updated to PascalCase Keys
     table = Table(show_header=False, expand=True, box=None)
     table.add_column("Key", style="cyan", width=15)
     table.add_column("Value", style="white")
     
-    table.add_row("🎫 Ticket ID", f"[bold green]{data.get('id')}[/bold green] ({data.get('State', 'N/A')})")
-    table.add_row("📂 Subsystem", f"{data.get('Subsystem', 'N/A')} -> {data.get('Component', 'N/A')}")
-    table.add_row("📊 Complexity", f"[yellow]{data.get('Complexity', 'N/A')}[/yellow]")
-    table.add_row("⏱️ Estimation", data.get('Estimation', 'N/A'))
+    # Note the .get('Key') changes below
+    t_id = data.get('Id', 'N/A')
+    t_state = data.get('State', 'N/A')
+    t_subsystem = data.get('Subsystem', 'N/A')
+    t_component = data.get('Component', 'N/A')
+    t_complexity = data.get('Complexity', 'N/A')
+    t_estimation = data.get('Estimation', 'N/A')
+    t_summary = data.get('Summary', 'No Title')
 
-    title = data.get('summary', data.get('title', 'No Title'))
-    console.print(Panel(table, title=f"[bold]{title}[/bold]", border_style="blue"))
+    table.add_row("🎫 Ticket ID", f"[bold green]{t_id}[/bold green] ({t_state})")
+    table.add_row("📂 Subsystem", f"{t_subsystem} -> {t_component}")
+    table.add_row("📊 Complexity", f"[yellow]{t_complexity}[/yellow]")
+    table.add_row("⏱️ Estimation", t_estimation)
 
-    # Description Rendering
-    description = data.get('description')
+    console.print(Panel(table, title=f"[bold]{t_summary}[/bold]", border_style="blue"))
+
+    # Description Rendering - Updated to PascalCase Key
+    description = data.get('Description')
     if description:
         # STEP 1: Process LaTeX before the Markdown parser sees it
         def math_replacer(match):
