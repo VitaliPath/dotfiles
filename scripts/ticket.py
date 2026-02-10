@@ -41,22 +41,37 @@ def clean_math(text):
     
     return text.strip()
 
-def find_ticket(ticket_id):
-    """Search for the ticket in the centralized Stoneburner-Knowledge-Base."""
+def find_and_load_ticket(ticket_id):
+    """Search inside all JSON files for a ticket with the matching 'Id'."""
     kb_base = Path("/Users/seanstoneburner/Repos/Stoneburner-Knowledge-Base")
-    # Recursively find the JSON file
-    for path in kb_base.rglob(f"{ticket_id}.json"):
-        return path
+    
+    # 1. Iterate through all .json files in the repo
+    for path in kb_base.rglob("*.json"):
+        try:
+            with open(path, "r") as f:
+                data = json.load(f)
+                
+                # 2. Since your JSON files contain lists of tickets:
+                if isinstance(data, list):
+                    for ticket in data:
+                        if ticket.get("Id") == ticket_id:
+                            return ticket
+                # 3. Handle case where JSON is a single ticket object
+                elif isinstance(data, dict):
+                    if data.get("Id") == ticket_id:
+                        return data
+        except (json.JSONDecodeError, OSError):
+            continue 
+            
     return None
 
 def view_ticket(ticket_id):
-    path = find_ticket(ticket_id)
-    if not path:
-        console.print(f"[red]Error: Ticket {ticket_id} not found.[/red]")
+    # Call the new search function that returns the data directly
+    data = find_and_load_ticket(ticket_id)
+    
+    if not data:
+        console.print(f"[red]Error: Ticket {ticket_id} not found in any knowledge base files.[/red]")
         return
-
-    with open(path, "r") as f:
-        data = json.load(f)
 
     # Header Panel - Updated to PascalCase Keys
     table = Table(show_header=False, expand=True, box=None)
