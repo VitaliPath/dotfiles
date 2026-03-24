@@ -13,7 +13,8 @@ except ImportError:
 EXCLUDE_DIRS = {
     'node_modules', 
     'bin', 
-    'obj', 
+    'obj',
+    'publish',
     '.git', 
     '__pycache__', 
     '.idea',
